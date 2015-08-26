@@ -15,7 +15,9 @@
 #if USAR_WATCHDOG
 #include "ent/watchdog.h"
 #endif
+#include "gltab/gl_vbo.h"
 #include "ntf/notificacao.h"
+#include "tex/texturas.h"
 
 namespace ntf {
 class Notificacao;
@@ -61,16 +63,16 @@ typedef std::unordered_map<unsigned int, std::string> MapaClientes;
 */
 class Tabuleiro : public ntf::Receptor {
  public:
-  explicit Tabuleiro(const Texturas* texturas, ntf::CentralNotificacoes* central);
+  explicit Tabuleiro(tex::Texturas* texturas, const m3d::Modelos3d* m3d, ntf::CentralNotificacoes* central);
 
   /** libera os recursos do tabuleiro, inclusive entidades. */
   virtual ~Tabuleiro();
 
   /** @return numero de quadrados no eixo E-W. */
-  inline int TamanhoX() const { return proto_.largura(); }
+  inline int TamanhoX() const { return proto_corrente_->largura(); }
 
   /** @return numero de quadrados no eixo N-S. */
-  inline int TamanhoY() const { return proto_.altura(); }
+  inline int TamanhoY() const { return proto_corrente_->altura(); }
 
   /** adiciona a entidade ao tabuleiro, através de uma notificação. Notifica clientes se a notificacao
   * for local.
@@ -93,8 +95,10 @@ class Tabuleiro : public ntf::Receptor {
   /** Move uma entidade notificando clientes. */
   void MoveEntidadeNotificando(const ntf::Notificacao& notificacao);
 
-  /** Seleciona todas as entidades do tabuleiro. */
-  void SelecionaTudo();
+  /** Seleciona todas as entidades do cenario corrente.
+  * @param fixas se as entidades fixas devem ser selecionadas.
+  */
+  void SelecionaTudo(bool fixas);
 
   /** Atualiza uma entidade, notificando clientes. */
   void AtualizaEntidadeNotificando(const ntf::Notificacao& notificacao);
@@ -161,7 +165,7 @@ class Tabuleiro : public ntf::Receptor {
   /** Trata evento de rotacao por delta (pinca). */
   void TrataRotacaoPorDelta(float delta_rad);
 
-  /** Trata evento de inclinacao por delta. */
+  /** Trata evento de inclinacao por delta radianos. */
   void TrataInclinacaoPorDelta(float delta_rad);
 
   /** Trata um evento de translacao do tabuleiro isoladamente. Parametros x, y sao as coordenadas originais,
@@ -241,6 +245,9 @@ class Tabuleiro : public ntf::Receptor {
     return mapa_modelos_;
   }
 
+  /** Retorna true se o tabuleiro tiver nome e puder ser salvo. */
+  bool TemNome() const { return !proto_.nome().empty(); }
+
   /** Seleciona a acao para as entidades selecionadas através do identificador. */
   void SelecionaAcao(const std::string& id_acao);
   void ProximaAcao();
@@ -281,7 +288,7 @@ class Tabuleiro : public ntf::Receptor {
   */
   void TrataMovimentoEntidadesSelecionadas(bool vertical, float valor);
 
-  /** Trata o movimento de entidades no eixo Z. */
+  /** Trata o movimento de entidades no eixo Z, notificando clientes. */
   void TrataTranslacaoZEntidadesSelecionadas(float delta);
 
   /** Adiciona a notificacao a lista de eventos que podem ser desfeitos. Caso a lista alcance tamanho
@@ -300,6 +307,9 @@ class Tabuleiro : public ntf::Receptor {
 
   /** No modo acao, cada clique gera uma acao. Usado especialmente no tablet. */
   void AlternaModoAcao();
+
+  /** No modo transicao, cada clique causa uma transicao de cenario. */
+  void AlternaModoTransicao();
 
   /** Retorna se o tabuleiro esta no modo mestre ou jogador. */
   bool ModoMestre() const { return modo_mestre_; }
@@ -326,6 +336,12 @@ class Tabuleiro : public ntf::Receptor {
 
   /** Alterna a camera presa a entidade. */
   void AlternaCameraPresa();
+
+  /** Carrega um cenario do tabuleiro. O cenario deve existir.
+  * @param id do cenario. Use CENARIO_PRINCIPAL para principal.
+  * @param camera a posicao para onde a camera olha (alvo).
+  */
+  void CarregaSubCenario(int id, const Posicao& camera);
 
   /** Em algumas ocasioes eh interessante parar o watchdog (dialogos por exemplo). */
   void DesativaWatchdog();
@@ -415,6 +431,13 @@ class Tabuleiro : public ntf::Receptor {
   /** Atualiza as acoes do tabuleiro, removendo as finalizadas. */
   void AtualizaAcoes();
 
+  /** Similar a TrataBotaoAcaoPressionado, mas pos operacao de picking. */
+  void TrataBotaoAcaoPressionadoPosPicking(bool acao_padrao, int x, int y, unsigned int id, unsigned int tipo_objeto, float profundidade);
+
+  /** Trata o botao pressionado em modo de transicao de cenarios, recebendo x e y em coordenadas opengl.
+  * O picking ja foi realizado pelo cliente, que devera prover as informacoes de id e tipo de objeto (pos_pilha). */
+  void TrataBotaoTransicaoPressionadoPosPicking(int x, int y, unsigned int id, unsigned int tipo_objeto);
+
   /** Encontra os hits de um clique em objetos. Desabilita iluminacao, texturas, grades, deixando apenas
   * as entidades e tabuleiros a serem pegos. Para desabilitar entidades, basta desliga-la antes da chamada
   * desta funcao.
@@ -492,6 +515,9 @@ class Tabuleiro : public ntf::Receptor {
   /** Alguns estados podem ser interrompidos por outros. Esta funcao finaliza o corrente antes de mudar para um novo. */
   void FinalizaEstadoCorrente();
 
+  /** Envia atualizacoes de movimento apos um intervalo de tempo. */
+  void RefrescaMovimentosParciais();
+
   /** seleciona o quadrado pelo ID. */
   void SelecionaQuadrado(int id_quadrado);
 
@@ -529,6 +555,15 @@ class Tabuleiro : public ntf::Receptor {
   /** Adiciona as entidades selecionaveis da notificacao ao tabuleiro. */
   void DeserializaEntidadesSelecionaveis(const ntf::Notificacao& notificacao);
 
+  /** Cria um novo sub cenario no tabuleiro. O id deve ser unico caso contrario nao faz nada. */
+  void CriaSubCenarioNotificando(const ntf::Notificacao& notificacao);
+
+  /** Remove um sub cenario do tabuleiro. Nao eh possivel remover o cenario principal. */
+  void RemoveSubCenarioNotificando(const ntf::Notificacao& notificacao);
+
+  /** @return o proto do sub cenario, ou nullptr se nao houver. */
+  TabuleiroProto* BuscaSubCenario(int id_cenario);
+
   /** @return um id unico de entidade para um cliente. Lanca excecao se nao houver mais id livre. */
   unsigned int GeraIdEntidade(int id_cliente);
 
@@ -537,13 +572,16 @@ class Tabuleiro : public ntf::Receptor {
   */
   int GeraIdTabuleiro();
 
+  /** Recarrega todas as texturas, incluindo sub cenarios. */
+  void AtualizaTexturasIncluindoSubCenarios(const ent::TabuleiroProto& proto_principal);
+
   /** Libera e carrega texturas de acordo com novo_proto e o estado atual. */
   void AtualizaTexturas(const ent::TabuleiroProto& novo_proto);
 
   /** Carrega as texturas do controle virtual. */
   void CarregaTexturasControleVirtual();
 
-  /** Carrega as texturas do controle virtual. */
+  /** Libera as texturas do controle virtual. */
   void LiberaTexturasControleVirtual();
 
   /** Desenha a grade do tabuleiro. */
@@ -554,6 +592,9 @@ class Tabuleiro : public ntf::Receptor {
 
   /** Desenha o identificador de acao da entidade selecionada. */
   void DesenhaIdAcaoEntidade();
+
+  /** Desenha as coordenadas na tela, abaixo das acoes. */
+  void DesenhaCoordenadas();
 
   /** Desenha o controle virtual. */
   void DesenhaControleVirtual();
@@ -573,8 +614,11 @@ class Tabuleiro : public ntf::Receptor {
   /** Salva a camera inicial. */
   void SalvaCameraInicial();
 
-  /** As vezes, a camera fica em posicoes estranhas por algum bug. Este comando a centraliza. */
+  /** Reinicia a camera para a posicao especificada no proto_.camera_inicial(). Caso nao haja, usa a posicao inicial. Pode carregar um cenario. */
   void ReiniciaCamera();
+
+  /** Ao limpar o proto, a iluminacao vai a zero. Esta funcao restaura os valores que dao visibilidade ao tabuleiro. */
+  void ReiniciaIluminacao(TabuleiroProto* sub_cenario);
 
   /** Configura a matriz de projecao de acordo com o tipo de camera. */
   void ConfiguraProjecao();
@@ -585,10 +629,13 @@ class Tabuleiro : public ntf::Receptor {
   bool VisaoMestre() const { return modo_mestre_ && !visao_jogador_; }
 
   /** Regera o Vertex Buffer Object do tabuleiro. Deve ser chamado sempre que houver uma alteracao de tamanho ou textura. */
-  void RegeraVbo();
+  void RegeraVboTabuleiro();
 
-  /** Gera o Vbo da caixa do ceu, chamado uma vez apenas. */
+  /** Regera o Vbo da caixa do ceu, chamado apenas uma vez ja que o objeto da caixa nao muda (apenas a textura pode mudar). */
   void GeraVboCaixaCeu();
+
+  /** @return true se estiver executando o comando de desfazer/refazer. */
+  bool Desfazendo() const { return ignorar_lista_eventos_; }
 
  private:
   // Parametros de desenho, importante para operacoes de picking e manter estado durante renderizacao.
@@ -644,6 +691,9 @@ class Tabuleiro : public ntf::Receptor {
   float primeiro_y_3d_;
   float primeiro_z_3d_;
 
+  /** Quantos ciclos faltam para atualizar posicoes parciais. Atualiza em zero. -1 desliga. */
+  int ciclos_para_atualizar_;
+
   /** Dimensoes do viewport. */
   int largura_;
   int altura_;
@@ -661,7 +711,9 @@ class Tabuleiro : public ntf::Receptor {
   MapaIdAcao mapa_acoes_;
   std::vector<std::string> id_acoes_;
 
-  const Texturas* texturas_;
+  tex::Texturas* texturas_;
+  const m3d::Modelos3d* m3d_;
+
 #if USAR_WATCHDOG
   Watchdog watchdog_;
 #endif
@@ -712,8 +764,17 @@ class Tabuleiro : public ntf::Receptor {
   bool detalhar_todas_entidades_ = false;
 
   // Controle virtual.
-  bool modo_acao_ = false;
-  bool modo_acao_cura_ = false;
+  // O clique pode ter subtipos. Por exemplo, no MODO_ACAO, todo clique executa uma acao.
+  // No MODO_TRANSICAO, o clique executara uma transicao de cenario.
+  // No MODO_DESENHO, o clique desenhara.
+  enum modo_clique_e {
+    MODO_NORMAL,
+    MODO_ACAO,      // executa acoes no clique.
+    MODO_DESENHO,   // reservado.
+    MODO_TRANSICAO, // executa transicao no clique.
+  };
+  modo_clique_e modo_clique_ = MODO_NORMAL;
+  bool modo_acao_cura_ = false;  // Indica se os incrementos de PV do controle vao adicionar ou subtrair valores.
   // Cada botao fica apertado por um numero de frames apos pressionado. Este mapa mantem o contador.
   std::map<int, int> contador_pressao_por_controle_;
 
@@ -731,7 +792,12 @@ class Tabuleiro : public ntf::Receptor {
   std::vector<float> vertices_grade_;
   std::vector<unsigned short> indices_grade_;
   // TODO VBO dessas coisas aqui em cima.
-  gl::Vbo vbo_caixa_ceu_;
+  gl::VboGravado vbo_caixa_ceu_;
+  gl::VboGravado vbo_cubo_;
+
+  // Sub cenarios. -1 para o principal.
+  int cenario_corrente_ = -1;
+  TabuleiroProto* proto_corrente_ = &proto_;
 
   bool gl_iniciado_ = false;
 

@@ -174,35 +174,35 @@ void TratadorTecladoMouse::TrataTeclaPressionada(teclas_e tecla, modificadores_e
     case Tecla_AltEsquerdo:
       tabuleiro_->DetalharTodasEntidades(true);
       return;
-    case Tecla_Cima:
+    case Tecla_Cima: {
       // Nao pode usar == pq a seta tambem aplica modificador de keypad.
-      if ((modificadores & Modificador_Shift) != 0) {
-        tabuleiro_->TrataTranslacaoZEntidadesSelecionadas(0.1f);
+      float incremento = ((modificadores & Modificador_Shift) != 0) ? 0.1f : 1.0f;
+      if ((modificadores & Modificador_Ctrl) != 0) {
+        tabuleiro_->TrataTranslacaoZEntidadesSelecionadas(incremento);
       } else {
-        tabuleiro_->TrataMovimentoEntidadesSelecionadas(true, 1.0f);
+        tabuleiro_->TrataMovimentoEntidadesSelecionadas(true, incremento);
       }
       return;
-    case Tecla_Baixo:
-      if ((modificadores & Modificador_Shift) != 0) {
-        tabuleiro_->TrataTranslacaoZEntidadesSelecionadas(-0.1f);
+    }
+    case Tecla_Baixo: {
+      float incremento = ((modificadores & Modificador_Shift) != 0) ? -0.1f : -1.0f;
+      if ((modificadores & Modificador_Ctrl) != 0) {
+        tabuleiro_->TrataTranslacaoZEntidadesSelecionadas(incremento);
       } else {
-        tabuleiro_->TrataMovimentoEntidadesSelecionadas(true, -1.0f);
+        tabuleiro_->TrataMovimentoEntidadesSelecionadas(true, incremento);
       }
       return;
-    case Tecla_Esquerda:
-      if ((modificadores & Modificador_Shift) != 0) {
-        tabuleiro_->TrataMovimentoEntidadesSelecionadas(false, -0.1f);
-      } else {
-        tabuleiro_->TrataMovimentoEntidadesSelecionadas(false, -1.0f);
-      }
+    }
+    case Tecla_Esquerda: {
+      float incremento = ((modificadores & Modificador_Shift) != 0) ? -0.1f : -1.0f;
+      tabuleiro_->TrataMovimentoEntidadesSelecionadas(false, incremento);
       return;
-    case Tecla_Direita:
-      if ((modificadores & Modificador_Shift) != 0) {
-        tabuleiro_->TrataMovimentoEntidadesSelecionadas(false, 0.1f);
-      } else {
-        tabuleiro_->TrataMovimentoEntidadesSelecionadas(false, 1.0f);
-      }
+    }
+    case Tecla_Direita: {
+      float incremento = ((modificadores & Modificador_Shift) != 0) ? 0.1f : 1.0f;
+      tabuleiro_->TrataMovimentoEntidadesSelecionadas(false, incremento);
       return;
+    }
     case Tecla_F:
       tabuleiro_->AlternaBitsEntidadeNotificando(ent::Tabuleiro::BIT_FIXA);
       return;
@@ -256,8 +256,12 @@ void TratadorTecladoMouse::TrataTeclaPressionada(teclas_e tecla, modificadores_e
       tabuleiro_->AlternaBitsEntidadeNotificando(ent::Tabuleiro::BIT_CAIDA);
       return;
     case Tecla_A:
+      if (modificadores == (Modificador_Ctrl | Modificador_Shift)) {
+        tabuleiro_->SelecionaTudo(true  /*fixas*/);
+        return;
+      }
       if (modificadores == Modificador_Ctrl) {
-        tabuleiro_->SelecionaTudo();
+        tabuleiro_->SelecionaTudo(false  /*fixas*/);
         return;
       }
       MudaEstado(ESTADO_TEMPORIZANDO_TECLADO);
@@ -281,9 +285,11 @@ void TratadorTecladoMouse::TrataTeclaPressionada(teclas_e tecla, modificadores_e
       MudaEstado(ESTADO_TEMPORIZANDO_TECLADO);
       teclas_.push_back(tecla);
       return;
-    //case Tecla_M:
-    //  tabuleiro_->AlternaModoMestre();
-    //  return;
+    case Tecla_M: {
+      //tabuleiro_->AlternaModoMestre();
+      //central_->AdicionaNotificacao(ntf::NovaNotificacao(ntf::TN_REMOVER_CENARIO));
+      return;
+    }
     case Tecla_P: {
       auto* n = ntf::NovaNotificacao(ntf::TN_PASSAR_UMA_RODADA);
       central_->AdicionaNotificacao(n);
@@ -291,9 +297,7 @@ void TratadorTecladoMouse::TrataTeclaPressionada(teclas_e tecla, modificadores_e
     }
     case Tecla_S:
       if ((modificadores & Modificador_Ctrl) != 0) {
-        auto* notificacao = ntf::NovaNotificacao(ntf::TN_SERIALIZAR_TABULEIRO);
-        notificacao->set_endereco("");  // Endereco vazio para sinalizar o uso do corrente.
-        central_->AdicionaNotificacao(notificacao);
+        central_->AdicionaNotificacao(ntf::NovaNotificacao(ntf::TN_ABRIR_DIALOGO_SALVAR_TABULEIRO));
         return;
       }
       tabuleiro_->AlternaBitsEntidadeNotificando(ent::Tabuleiro::BIT_SELECIONAVEL);

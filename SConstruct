@@ -74,6 +74,11 @@ if usar_opengl_es:
   if sistema != 'apple':
     env['LIBS'] += ['GLESv1_CM']
 
+usar_shader = (ARGUMENTS.get('usar_shader', '0') == '1')
+print 'usar_shader : %r' % usar_shader
+if usar_shader:
+  env['CPPDEFINES']['USAR_SHADER'] = 1
+
 gerar_profile = (ARGUMENTS.get('gerar_profile', '0') == '1')
 if gerar_profile:
   env['CXXFLAGS'] += ['-pg']
@@ -117,10 +122,16 @@ cVisualizador3d = env.Object('ifg/qt/visualizador3d.cpp')
 cTexturasLode = env.Object('tex/lodepng.cpp')
 cTexturas = env.Object('tex/texturas.cpp')
 
+# Modelos 3d.
+cModelos3d = env.Object('m3d/m3d.cpp')
+
 # ent
 cTabuleiro = env.Object('ent/tabuleiro.cpp')
 cTabuleiroControleVirtual = env.Object('ent/tabuleiro_controle_virtual.cpp')
+cTabuleiroPicking = env.Object('ent/tabuleiro_picking.cpp')
 cEntidade = env.Object('ent/entidade.cpp')
+cEntidadeComposta = env.Object('ent/entidade_composta.cpp')
+cEntidadeForma = env.Object('ent/entidade_forma.cpp')
 cAcoes = env.Object('ent/acoes.cpp')
 cConstantes = env.Object('ent/constantes.cpp')
 cEntUtil = env.Object('ent/util.cpp')
@@ -134,11 +145,13 @@ ent_proto = env.Protoc(
 
 # arq
 cArq = env.Object('arq/arquivo.cpp')
+cArqPc = env.Object('arq/arquivo_pc.cpp')
 
 # net
 cNetServidor = env.Object('net/servidor.cpp')
 cNetCliente = env.Object('net/cliente.cpp')
 cNetUtil = env.Object('net/util.cpp')
+cNetSocket = env.Object('net/socket.cpp')
 
 # Notificacoes.
 cNtf = env.Object('ntf/notificacao.cpp')
@@ -151,10 +164,11 @@ ntf_proto = env.Protoc(
 cGl = env.Object('gltab/gl_es.cpp') if usar_opengl_es else env.Object('gltab/gl_normal.cpp')
 cGlComum = env.Object('gltab/gl_comum.cpp')
 cGlChar = env.Object('gltab/gl_char.cpp')
+cGlVbo = env.Object('gltab/gl_vbo.cpp')
 
 objetos = [
     # net.
-    cNetServidor, cNetCliente, cNetUtil,
+    cNetServidor, cNetCliente, cNetUtil, cNetSocket,
     # notificacoes.
     ntf_proto[0], cNtf,
     # interface.
@@ -163,12 +177,15 @@ objetos = [
     cPrincipal, cMenuPrincipal, cVisualizador3d, cUtil,
     # Texturas
     cTexturas, cTexturasLode,
+    # Modelos3d.
+    cModelos3d,
     # ent. Os protos sao de 2 em 2 para nao incluir os cabecalhos.
-    ent_proto[0], ent_proto[2], ent_proto[4], cTabuleiro, cTabuleiroControleVirtual, cEntidade, cAcoes, cConstantes, cEntUtil, cEntDesenho,
+    ent_proto[0], ent_proto[2], ent_proto[4], cTabuleiro, cTabuleiroControleVirtual, cTabuleiroPicking,
+    cEntidade, cEntidadeComposta, cEntidadeForma, cAcoes, cConstantes, cEntUtil, cEntDesenho,
     # gl.
-    cGlComum, cGl, cGlChar,
+    cGlComum, cGl, cGlChar, cGlVbo,
     # arq
-    cArq,
+    cArq, cArqPc,
 ] + ([ cEntWatchdog ] if sistema == 'linux' else [])
 
 
@@ -191,6 +208,12 @@ if compilar_testes:
   env.Program(
       target = 'teste_modelos',
       source = ['ifg/modelos_test.cpp', ] + objetos)
+  env.Program(
+      target = 'teste_arquivo',
+      source = ['arq/arquivo_test.cpp', ] + objetos)
+  env.Program(
+      target = 'teste_net_util',
+      source = ['net/util_test.cpp', ] + objetos)
 
 rodar_benchmark = (ARGUMENTS.get('benchmark', '0') == '1')
 print 'benchmark : %r' % rodar_benchmark

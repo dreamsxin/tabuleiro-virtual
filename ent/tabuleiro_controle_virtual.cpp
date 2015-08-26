@@ -53,6 +53,9 @@ const int CONTROLE_CIMA = 18;
 const int CONTROLE_BAIXO = 19;
 const int CONTROLE_ESQUERDA = 20;
 const int CONTROLE_DIREITA = 21;
+const int CONTROLE_CIMA_VERTICAL = 22;
+const int CONTROLE_BAIXO_VERTICAL = 23;
+const int CONTROLE_TRANSICAO = 24;
 
 // Texturas do controle virtual.
 const char* TEXTURA_ACAO = "icon_sword.png";
@@ -63,8 +66,9 @@ const char* TEXTURA_QUEDA = "icon_slide.png";
 const char* TEXTURA_CAMERA_ISOMETRICA = "icon_isometric_camera.png";
 const char* TEXTURA_CAMERA_PRESA = "icon_tracking_camera.png";
 const char* TEXTURA_DESFAZER = "icon_undo.png";
+const char* TEXTURA_TRANSICAO = "icon_enter.png";
 const std::vector<std::string> g_texturas = { TEXTURA_ACAO, TEXTURA_VOO, TEXTURA_VISIBILIDADE, TEXTURA_LUZ, TEXTURA_QUEDA,
-                                              TEXTURA_CAMERA_ISOMETRICA, TEXTURA_CAMERA_PRESA, TEXTURA_DESFAZER };
+                                              TEXTURA_CAMERA_ISOMETRICA, TEXTURA_CAMERA_PRESA, TEXTURA_DESFAZER, TEXTURA_TRANSICAO };
 
 // Para botoes sem estado.
 bool RetornaFalse() {
@@ -74,19 +78,19 @@ bool RetornaFalse() {
 }  // namespace.
 
 void Tabuleiro::CarregaTexturasControleVirtual() {
+  auto* n = ntf::NovaNotificacao(ntf::TN_CARREGAR_TEXTURA);
   for (const std::string& textura : g_texturas) {
-    auto* n = ntf::NovaNotificacao(ntf::TN_CARREGAR_TEXTURA);
-    n->mutable_info_textura()->set_id(textura);
-    central_->AdicionaNotificacao(n);
+    n->add_info_textura()->set_id(textura);
   }
+  central_->AdicionaNotificacao(n);
 }
 
 void Tabuleiro::LiberaTexturasControleVirtual() {
+  auto* n = ntf::NovaNotificacao(ntf::TN_DESCARREGAR_TEXTURA);
   for (const std::string& textura : g_texturas) {
-    auto* n = ntf::NovaNotificacao(ntf::TN_DESCARREGAR_TEXTURA);
-    n->mutable_info_textura()->set_id(textura);
-    central_->AdicionaNotificacao(n);
+    n->add_info_textura()->set_id(textura);
   }
+  central_->AdicionaNotificacao(n);
 }
 
 void Tabuleiro::PickingControleVirtual(bool alterna_selecao, int id) {
@@ -94,6 +98,9 @@ void Tabuleiro::PickingControleVirtual(bool alterna_selecao, int id) {
   switch (id) {
     case CONTROLE_ACAO:
       AlternaModoAcao();
+      break;
+    case CONTROLE_TRANSICAO:
+      AlternaModoTransicao();
       break;
     case CONTROLE_CAMERA_ISOMETRICA:
       AlternaCameraIsometrica();
@@ -104,8 +111,14 @@ void Tabuleiro::PickingControleVirtual(bool alterna_selecao, int id) {
     case CONTROLE_CIMA:
       TrataMovimentoEntidadesSelecionadas(true, 1.0f);
       break;
+    case CONTROLE_CIMA_VERTICAL:
+      TrataTranslacaoZEntidadesSelecionadas(1.0f);
+      break;
     case CONTROLE_BAIXO:
       TrataMovimentoEntidadesSelecionadas(true, -1.0f);
+      break;
+    case CONTROLE_BAIXO_VERTICAL:
+      TrataTranslacaoZEntidadesSelecionadas(-1.0f);
       break;
     case CONTROLE_ESQUERDA:
       TrataMovimentoEntidadesSelecionadas(false, -1.0f);
@@ -184,10 +197,10 @@ void Tabuleiro::DesenhaControleVirtual() {
   gl::TamanhoFonte(&fonte_x_int, &fonte_y_int);
   const float fonte_x = fonte_x_int;
   const float fonte_y = fonte_y_int;
-  const float botao_y = fonte_y * 2.5f;
-  //const float botao_x = botao_y;  // botoes quadrados. Era: fonte_x * 3.0f;
-  const float botao_x = fonte_x * 3.0f;
-  const float padding = fonte_x / 2;
+  const float altura_botao = fonte_y * 2.5f;
+  //const float botao_x = altura_botao;  // botoes quadrados. Era: fonte_x * 3.0f;
+  const float largura_botao = fonte_x * 3.0f;
+  const float padding = parametros_desenho_.has_picking_x() ? 0 : fonte_x / 4;
 
   // Todos os botoes tem tamanho baseado no tamanho da fonte.
   struct DadosBotao {
@@ -201,13 +214,12 @@ void Tabuleiro::DesenhaControleVirtual() {
     std::function<bool()> estado_botao;  // Funcao que retorna o estado botao (true para apertado).
     int num_lados_botao;  // numero de lados do botao,.
     float rotacao_graus;  // Rotacao do botao.
-    float translacao_x;  // Translacao do desenho em fator de escala da fonte (botao_x * translacao_x)
-    float translacao_y;  // Translacao do desenho em fator de escala da fonte (botao_y * translacao_x).
+    float translacao_x;  // Translacao do desenho em fator de escala da fonte (largura_botao * translacao_x)
+    float translacao_y;  // Translacao do desenho em fator de escala da fonte (altura_botao * translacao_x).
   };
   const std::vector<DadosBotao> dados_botoes = {
-    // Botoes grandes.
     // Acao.
-    { 2, 0, 0, "A", nullptr, TEXTURA_ACAO, CONTROLE_ACAO, [this] () { return modo_acao_; } , 4, 0.0f, 0.0f, 0.0f },
+    { 2, 0, 0, "A", nullptr, TEXTURA_ACAO, CONTROLE_ACAO, [this] () { return modo_clique_ == MODO_ACAO; } , 4, 0.0f, 0.0f, 0.0f },
     // Linha de cima.
     // Alterna acao para tras.
     { 1, 1, 2, "<", nullptr, "", CONTROLE_ACAO_ANTERIOR, RetornaFalse, 4, 0.0f, 0.0f, 0.0f },
@@ -227,27 +239,34 @@ void Tabuleiro::DesenhaControleVirtual() {
     // Apaga dano.
     { 1, 0, 6, "x", nullptr, "", CONTROLE_APAGA_DANO, RetornaFalse, 4, 0.0f, 0.0f, 0.0f },
 
+    // Transicao.
+    { 2, 0, 8, "T", nullptr, TEXTURA_TRANSICAO, CONTROLE_TRANSICAO, [this] () { return modo_clique_ == MODO_TRANSICAO; } , 4, 0.0f, 0.0f, 0.0f },
+
     // Status.
-    { 1, 0, 8, "L", COR_AMARELA, TEXTURA_LUZ, CONTROLE_LUZ, RetornaFalse, 4, 0.0f, 0.0f, 0.0f },
-    { 1, 0, 9, "Q", nullptr, TEXTURA_QUEDA, CONTROLE_QUEDA, RetornaFalse, 4, 0.0f, 0.0f, 0.0f },
-    { 1, 1, 8, "Vo", nullptr, TEXTURA_VOO, CONTROLE_VOO, RetornaFalse, 4, 0.0f, 0.0f, 0.0f },
-    { 1, 1, 9, "Vi", nullptr, TEXTURA_VISIBILIDADE, CONTROLE_VISIBILIDADE, RetornaFalse, 4, 0.0f, 0.0f, 0.0f },
+    { 1, 0, 10, "L", COR_AMARELA, TEXTURA_LUZ, CONTROLE_LUZ, RetornaFalse, 4, 0.0f, 0.0f, 0.0f },
+    { 1, 0, 11, "Q", nullptr, TEXTURA_QUEDA, CONTROLE_QUEDA, RetornaFalse, 4, 0.0f, 0.0f, 0.0f },
+    { 1, 1, 10, "Vo", nullptr, TEXTURA_VOO, CONTROLE_VOO, RetornaFalse, 4, 0.0f, 0.0f, 0.0f },
+    { 1, 1, 11, "Vi", nullptr, TEXTURA_VISIBILIDADE, CONTROLE_VISIBILIDADE, RetornaFalse, 4, 0.0f, 0.0f, 0.0f },
 
     // Setas.
-    { 1, 1, 11, "", nullptr, "", CONTROLE_CIMA,     RetornaFalse, 3, 90.0f,  0.0f, 0.0f },
-    { 1, 0, 11, "", nullptr, "", CONTROLE_BAIXO,    RetornaFalse, 3, -90.0f, 0.0f, 0.0f },
-    { 1, 0, 10, "", nullptr, "", CONTROLE_ESQUERDA, RetornaFalse, 3, 180.0f, 0.2f, 0.5f },
-    { 1, 0, 12, "", nullptr, "", CONTROLE_DIREITA,  RetornaFalse, 3, 0.0f,  -0.2f, 0.5f },
+    { 1, 1, 13, "", nullptr, "", CONTROLE_CIMA,     RetornaFalse, 3, 0.0f,   0.0f,  -0.1f },
+    { 1, 0, 13, "", nullptr, "", CONTROLE_BAIXO,    RetornaFalse, 3, 180.0f, 0.0f,  0.1f },
+    { 1, 0, 12, "", nullptr, "", CONTROLE_ESQUERDA, RetornaFalse, 3, 90.0f,  0.4f,  0.5f },
+    { 1, 0, 14, "", nullptr, "", CONTROLE_DIREITA,  RetornaFalse, 3, -90.0f, -0.4f, 0.5f },
+
+    // Setas verticais.
+    { 1, 1, 15, "^", nullptr, "", CONTROLE_CIMA_VERTICAL,  RetornaFalse, 4, 0.0f, 0.0f,  0.0f },
+    { 1, 0, 15, "v", nullptr, "", CONTROLE_BAIXO_VERTICAL, RetornaFalse, 4, 0.0f, 0.0f,  0.0f },
 
     // Cameras.
-    { 1, 0, 13, "Is", nullptr, TEXTURA_CAMERA_ISOMETRICA, CONTROLE_CAMERA_ISOMETRICA, [this] () { return this->camera_isometrica_; }, 4, 0.0f, 0.0f, 0.0f },
-    { 1, 1, 13, "Pr", nullptr, TEXTURA_CAMERA_PRESA,      CONTROLE_CAMERA_PRESA,      [this] () { return this->camera_presa_; },      4, 0.0f, 0.0f, 0.0f },
+    { 1, 0, 16, "Is", nullptr, TEXTURA_CAMERA_ISOMETRICA, CONTROLE_CAMERA_ISOMETRICA, [this] () { return this->camera_isometrica_; }, 4, 0.0f, 0.0f, 0.0f },
+    { 1, 1, 16, "Pr", nullptr, TEXTURA_CAMERA_PRESA,      CONTROLE_CAMERA_PRESA,      [this] () { return this->camera_presa_; },      4, 0.0f, 0.0f, 0.0f },
 
     // Desfazer.
-    { 2, 0, 14, "<=", COR_VERMELHA, TEXTURA_DESFAZER, CONTROLE_DESFAZER, RetornaFalse, 4, 30.0f, 0.0f, 0.0f },
+    { 2, 0, 17, "<=", COR_VERMELHA, TEXTURA_DESFAZER, CONTROLE_DESFAZER, RetornaFalse, 4, 30.0f, 0.0f, 0.0f },
 
     // Contador de rodadas.
-    { 2, 0, 16, net::to_string(proto_.contador_rodadas()), nullptr, "", CONTROLE_RODADA, RetornaFalse, 8, 0.0f, 0.0f, 0.0f },
+    { 2, 0, 19, net::to_string(proto_.contador_rodadas()), nullptr, "", CONTROLE_RODADA, RetornaFalse, 8, 0.0f, 0.0f, 0.0f },
   };
   GLint viewport[4];
   gl::Le(GL_VIEWPORT, viewport);
@@ -289,37 +308,34 @@ void Tabuleiro::DesenhaControleVirtual() {
       float* cor = estado_ativo || pressionado ? cor_ativa : cor_padrao;
       gl::MudaCor(cor[0], cor[1], cor[2], 1.0f);
       float xi, xf, yi, yf;
-      xi = db.coluna * botao_x;
-      xf = xi + db.tamanho * botao_x;
-      yi = db.linha * botao_y;
-      yf = yi + db.tamanho * botao_y;
+      xi = db.coluna * largura_botao;
+      xf = xi + db.tamanho * largura_botao;
+      yi = db.linha * altura_botao;
+      yf = yi + db.tamanho * altura_botao;
       gl::MatrizEscopo salva;
-      if (db.num_lados_botao == 4) {
-        InfoVerticeTabuleiro vertice_controle_virtual[] = {
-          { xi + padding, yi + padding, 0.0f, 1.0f },
-          { xf - padding, yi + padding, 1.0f, 1.0f },
-          { xf - padding, yf - padding, 1.0f, 0.0f },
-          { xi + padding, yf - padding, 0.0f, 0.0f },
-        };
-        unsigned short ponteiro_vertices[] = { 0, 1, 2, 3 };
+      if (db.num_lados_botao == 4 || parametros_desenho_.has_picking_x()) {
+        float trans_x = (db.translacao_x * largura_botao);
+        float trans_y = (db.translacao_y * altura_botao);
         unsigned int id_textura = db.textura.empty() ? GL_INVALID_VALUE : texturas_->Textura(db.textura);
         if (parametros_desenho_.desenha_texturas() && id_textura != GL_INVALID_VALUE) {
           gl::Habilita(GL_TEXTURE_2D);
-          gl::HabilitaEstadoCliente(GL_TEXTURE_COORD_ARRAY);
-          glBindTexture(GL_TEXTURE_2D, id_textura);
-          gl::PonteiroVerticesTexturas(2, GL_FLOAT, sizeof(InfoVerticeTabuleiro), (void*)&vertice_controle_virtual[0].s0);
+          gl::LigacaoComTextura(GL_TEXTURE_2D, id_textura);
         }
-        gl::HabilitaEstadoCliente(GL_VERTEX_ARRAY);
-        gl::PonteiroVertices(2, GL_FLOAT, sizeof(InfoVerticeTabuleiro), (void*)vertice_controle_virtual);
-        gl::DesenhaElementos(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_SHORT, (void*)ponteiro_vertices);
+        float tam_x = xf - (2.0f * padding) - xi;
+        float tam_y = yf - (2.0f * padding) - yi;
+        gl::Translada(xi + padding + trans_x + (tam_x / 2.0f), yi + padding + trans_y + (tam_y / 2.0f), 0.0f);
+        gl::Escala(tam_x, tam_y, 1.0f);
+        gl::Retangulo(1.0f);
         gl::Desabilita(GL_TEXTURE_2D);
-        gl::DesabilitaEstadoCliente(GL_TEXTURE_COORD_ARRAY);
-        gl::DesabilitaEstadoCliente(GL_VERTEX_ARRAY);
       } else {
-        gl::Translada(((xi + xf) / 2.0f) + (db.translacao_x * botao_x),
-                      ((yi + yf) / 2.0f) + (db.translacao_y * botao_y), 0.0f);
+        gl::Translada(((xi + xf) / 2.0f) + (db.translacao_x * largura_botao),
+                      ((yi + yf) / 2.0f) + (db.translacao_y * altura_botao), 0.0f);
         gl::Roda(db.rotacao_graus, 0.0f, 0.0f, 1.0f);
-        DesenhaDisco((xf - xi) / 2.0f, db.num_lados_botao);
+        if (db.num_lados_botao == 3) {
+          gl::Triangulo(xf - xi);
+        } else {
+          gl::Disco((xf - xi) / 2.0f, db.num_lados_botao);
+        }
       }
     }
   }
@@ -331,10 +347,10 @@ void Tabuleiro::DesenhaControleVirtual() {
         continue;
       }
       float xi, xf, yi, yf;
-      xi = db.coluna * botao_x;
-      xf = xi + db.tamanho * botao_x;
-      yi = db.linha * botao_y;
-      yf = yi + db.tamanho * botao_y;
+      xi = db.coluna * largura_botao;
+      xf = xi + db.tamanho * largura_botao;
+      yi = db.linha * altura_botao;
+      yf = yi + db.tamanho * altura_botao;
       float x_meio = (xi + xf) / 2.0f;
       float y_meio = (yi + yf) / 2.0f;
       float y_base = y_meio - (fonte_y / 4.0f);

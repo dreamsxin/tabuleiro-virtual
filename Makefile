@@ -3,7 +3,7 @@ all_sem_testes:
 	scons
 
 all:
-	scons testes=1
+	scons testes=1 usar_shader=1
 
 opengles:
 	scons usar_opengl_es=1 gerar_profile=1
@@ -24,7 +24,7 @@ windows:
 	scons sistema=win32
 
 apple:
-	scons sistema=apple debug=0
+	scons sistema=apple debug=0 usar_shader=1
 
 apple_opengles:
 	scons sistema=apple debug=0 usar_opengl_es=1
@@ -36,7 +36,7 @@ apple_debug_opengles:
 	scons sistema=apple debug=1 usar_opengl_es=1
 
 apple_test:
-	scons sistema=apple debug=1 testes=1 modelos_test teste_ent_util 
+	scons sistema=apple debug=1 testes=1 teste_modelos teste_ent_util teste_arquivo teste_net_util
 
 apple_benchmark:
 	scons sistema=apple debug=0 benchmark=1 benchmark
